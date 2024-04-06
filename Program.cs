@@ -1,5 +1,6 @@
 using ToDoList.Model;
 using Data.Mockup;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +24,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-// app.UseCors();
+app.UseCors();
 
 app.MapGet("/todo/list-item", (MockupList<ListItem> todoStore) =>
 {
@@ -60,6 +61,21 @@ app.MapPost("/todo/list-item", (ListItem item, MockupList<ListItem> todoStore) =
     return Results.Ok(item);
 })
 .WithName("SaveItem")
+.Produces(201)
+.Produces(200)
+.WithOpenApi();
+
+app.MapDelete("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore) =>
+{
+    var deleteIndex = todoStore.FindIndex(i => i.Id == id);
+
+    if (deleteIndex < 0) return Results.NotFound();
+
+    todoStore.RemoveAt(deleteIndex);
+
+    return Results.Ok();
+})
+.WithName("DeleteItem")
 .WithOpenApi();
 
 app.Run();
