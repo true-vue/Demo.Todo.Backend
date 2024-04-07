@@ -7,6 +7,7 @@ using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
+using ToDoList.Dto;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,7 +19,7 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(o => o.AllowAnyOrigin().AllowAn
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "My API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "ToDoList application", Version = "v1" });
 
     // Define the OAuth2.0 scheme that's in use (i.e., Implicit Flow)
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -77,9 +78,9 @@ builder.Services.AddScoped<IUserManager, UserManager>();
 builder.Services.AddSingleton(new MockupList<ListItem>("Id"));
 var users = new MockupList<User>("Id")
 {
-    User.New("user1", "user1"),
-    User.New("user2", "user3"),
-    User.New("user3", "user3")
+    User.New("user1", "pass1"),
+    User.New("user2", "pass2"),
+    User.New("user3", "pass3")
 };
 
 builder.Services.AddSingleton(users);
@@ -142,41 +143,42 @@ app.MapPost("/authenticate", (UserCredentials credentials, MockupList<User> user
     }
     return Results.BadRequest();
 })
-.Produces<AuthResponse>()
+.Produces<AuthResponse>(200)
 .ProducesProblem(400)
 .WithName("Authenticate")
 .WithOpenApi();
 
 // GetAllItems
-app.MapGet("/todo/list-item", (MockupList<ListItem> todoStore) =>
+app.MapGet("/todo/list-item", (MockupList<ListItem> todoStore, IUserManager userManager) =>
 {
-    return todoStore;
+    return todoStore.Where(i => i.UserId == userManager.User?.Id).Select(i => new ListItemDTO(i));
 })
 .WithName("GetAllItems")
 .WithOpenApi()
 .RequireAuthorization();
 
 // GetItem
-app.MapGet("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore) =>
+app.MapGet("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore, IUserManager userManager) =>
 {
-    var item = todoStore.FirstOrDefault(i => i.Id == id);
+    var item = todoStore.FirstOrDefault(i => i.Id == id && i.UserId == userManager.User?.Id);
 
     if (item == null) return Results.NotFound();
 
-    return Results.Ok(item);
+    return Results.Ok(new ListItemDTO(item));
 })
 .WithName("GetItem")
 .WithOpenApi()
 .RequireAuthorization();
 
 // SaveItem
-app.MapPost("/todo/list-item", (ListItem item, MockupList<ListItem> todoStore) =>
+app.MapPost("/todo/list-item", (ListItemDTO itemDTO, MockupList<ListItem> todoStore, IUserManager userManager) =>
 {
+    var item = itemDTO.ToListItem(userManager.User.Id);
     if (item.Id == 0)
     {
         // add new
         todoStore.Add(item);
-        return Results.Created($"/todo/list-item/{item.Id}", item);
+        return Results.Created($"/todo/list-item/{item.Id}", new ListItemDTO(item));
     }
     var updateIndex = todoStore.FindIndex(i => i.Id == item.Id);
 
@@ -184,18 +186,18 @@ app.MapPost("/todo/list-item", (ListItem item, MockupList<ListItem> todoStore) =
 
     todoStore[updateIndex] = item;
 
-    return Results.Ok(item);
+    return Results.Ok(new ListItemDTO(item));
 })
+.Produces<ListItemDTO>(201)
+.Produces<ListItemDTO>(200)
 .WithName("SaveItem")
-.Produces(201)
-.Produces(200)
 .WithOpenApi()
 .RequireAuthorization();
 
 // DeleteItem
-app.MapDelete("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore) =>
+app.MapDelete("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore, IUserManager userManager) =>
 {
-    var deleteIndex = todoStore.FindIndex(i => i.Id == id);
+    var deleteIndex = todoStore.FindIndex(i => i.Id == id && i.UserId == userManager.User?.Id);
 
     if (deleteIndex < 0) return Results.NotFound();
 
