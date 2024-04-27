@@ -176,6 +176,14 @@ app.MapPost("/todo/list-item", (ListItemDTO itemDTO, MockupList<ListItem> todoSt
     var item = itemDTO.ToListItem(userManager.User.Id);
     if (item.Id == 0)
     {
+        var isDuplicate = todoStore.Any(i => i.Text.Equals(itemDTO.Text, StringComparison.InvariantCultureIgnoreCase));
+        if (isDuplicate)
+        {
+            return Results.BadRequest(new ApiError
+            {
+                ErrorCode = ApiErrorCodes.ItemDuplicated
+            });
+        }
         // add new
         todoStore.Add(item);
         return Results.Created($"/todo/list-item/{item.Id}", new ListItemDTO(item));
@@ -190,6 +198,7 @@ app.MapPost("/todo/list-item", (ListItemDTO itemDTO, MockupList<ListItem> todoSt
 })
 .Produces<ListItemDTO>(201)
 .Produces<ListItemDTO>(200)
+.Produces<ApiError>(400)
 .WithName("SaveItem")
 .WithOpenApi()
 .RequireAuthorization();
