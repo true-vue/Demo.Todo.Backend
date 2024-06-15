@@ -6,7 +6,6 @@ using System.Text;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.OpenApi.Models;
-using Microsoft.AspNetCore.Http.HttpResults;
 using ToDoList.Dto;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -75,15 +74,34 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserManager, UserManager>();
 
 // DATA MOCKUP
-builder.Services.AddSingleton(new MockupList<ListItem>("Id"));
 var users = new MockupList<User>("Id")
 {
-    User.New("user1", "pass1"),
-    User.New("user2", "pass2"),
-    User.New("user3", "pass3")
+    User.New("user1", "Pass123#"),
+    User.New("user2", "pass123#"),
+    User.New("user3", "pass123#")
 };
-
 builder.Services.AddSingleton(users);
+
+var lists = new MockupList<ListItemGroup>("Id") {
+    ListItemGroup.New(1, "porządki"),
+    ListItemGroup.New(1, "szkoła"),
+    ListItemGroup.New(1, "dom"),
+};
+builder.Services.AddSingleton(lists);
+
+var listItems = new MockupList<ListItem>("Id")
+{
+    ListItem.New(1,1,"[porządki] Posprzątać kuchnię"),
+    ListItem.New(1,1,"[porządki] Wynieść śmieci"),
+    ListItem.New(1,1,"[porządki] Zrobić pranie"),
+    ListItem.New(1,2,"[szkoła] Odrobić zadanie"),
+    ListItem.New(1,2,"[szkoła] Przygotować się do lekcji"),
+    ListItem.New(1,2,"[szkoła] Spakować plecak"),
+    ListItem.New(1,3,"[dom] Wybrać meble do salonu"),
+    ListItem.New(1,3,"[dom] Powiesić obraz"),
+    ListItem.New(1,3,"[dom] Naprawić cieknący kran")
+};
+builder.Services.AddSingleton(listItems);
 
 // build the app.
 var app = builder.Build();
@@ -148,12 +166,34 @@ app.MapPost("/authenticate", (UserCredentials credentials, MockupList<User> user
 .WithName("Authenticate")
 .WithOpenApi();
 
+// GetItemGroups
+app.MapGet("/todo/list-item-groups", (MockupList<ListItemGroup> groupsStore, IUserManager userManager) =>
+{
+    return groupsStore.Where(g => g.UserId == userManager.User?.Id).Select(g => new ListItemGroupDTO(g));
+})
+.WithName("GetItemGroups")
+.Produces<List<ListItemGroupDTO>>(200)
+.WithOpenApi()
+.RequireAuthorization();
+
+// GetItemGroupItems
+app.MapGet("/todo/list-item-group/items", (int groupId, MockupList<ListItem> todoStore, IUserManager userManager) =>
+{
+    return todoStore.Where(i => i.UserId == userManager.User?.Id && i.ListItemGroupId == groupId).Select(i => new ListItemDTO(i));
+})
+.WithName("GetItemGroupItems")
+.Produces<List<ListItemDTO>>(200)
+.WithOpenApi()
+.RequireAuthorization();
+
+
 // GetAllItems
 app.MapGet("/todo/list-item", (MockupList<ListItem> todoStore, IUserManager userManager) =>
 {
     return todoStore.Where(i => i.UserId == userManager.User?.Id).Select(i => new ListItemDTO(i));
 })
 .WithName("GetAllItems")
+.Produces<List<ListItemDTO>>(200)
 .WithOpenApi()
 .RequireAuthorization();
 
@@ -167,6 +207,7 @@ app.MapGet("/todo/list-item/{id}", (int id, MockupList<ListItem> todoStore, IUse
     return Results.Ok(new ListItemDTO(item));
 })
 .WithName("GetItem")
+.Produces<ListItemDTO>(200)
 .WithOpenApi()
 .RequireAuthorization();
 
